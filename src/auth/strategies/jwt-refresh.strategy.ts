@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -14,7 +14,15 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
         });
     }
 
-    validate(req: { body: { refreshToken: string } }, payload: { sub: number }) {
-        return { id: payload.sub, refreshToken: req.body.refreshToken };
+    validate(
+        req: { body: { refreshToken: string } },
+        payload: { sub: number; jti: string; typ: string },
+    ) {
+        if (payload.typ !== 'refresh') throw new UnauthorizedException();
+        return {
+            id: payload.sub,
+            sessionId: payload.jti,
+            refreshToken: req.body.refreshToken,
+        };
     }
 }

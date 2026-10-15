@@ -23,10 +23,6 @@ export class UsersService {
         });
     }
 
-    setRefreshTokenHash(id: number, hash: string | null) {
-        return this.usersRepo.update(id, { refreshTokenHash: hash });
-    }
-
     create(email: string, passwordHash: string) {
         const user = this.usersRepo.create({ email, passwordHash });
         return this.usersRepo.save(user);

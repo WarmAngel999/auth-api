@@ -6,7 +6,27 @@ import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: (env: Record<string, unknown>) => {
+        const access = env.JWT_ACCESS_SECRET;
+        const refresh = env.JWT_REFRESH_SECRET;
+        if (
+            typeof access !== 'string' ||
+            typeof refresh !== 'string' ||
+            access.length < 32 ||
+            refresh.length < 32
+        ) {
+          throw new Error(
+              'JWT_ACCESS_SECRET и JWT_REFRESH_SECRET должны быть заданы и быть не короче 32 символов',
+          );
+        }
+        if (access === refresh) {
+          throw new Error('JWT_ACCESS_SECRET и JWT_REFRESH_SECRET должны отличаться');
+        }
+        return env;
+      },
+    }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -17,7 +37,7 @@ import { AuthModule } from './auth/auth.module';
         password: config.get('DB_PASSWORD'),
         database: config.get('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: config.get('NODE_EVN') === 'development',
       }),
     }),
     UsersModule,

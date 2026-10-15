@@ -14,29 +14,43 @@ export class AuthController {
     register(@Body() dto: RegisterDto) {
         return this.authService.register(dto);
     }
-    @UseGuards(JwtAuthGuard)
-    @Get('me')
-    me(@Req() req: { user: { id: number; email: string; role: string } }) {
-        return req.user;
-    }
     @UseGuards(LocalAuthGuard)
     @HttpCode(200)
     @Post('login')
     login(@Req() req: { user: User }) {
         return this.authService.login(req.user);
     }
+    @UseGuards(JwtAuthGuard)
+    @Get('me')
+    me(@Req() req: { user: { id: number; email: string; role: string } }) {
+        return req.user;
+    }
     @UseGuards(JwtRefreshGuard)
     @HttpCode(200)
     @Post('refresh')
-    refresh(@Req() req: { user: { id: number; refreshToken: string } }) {
-        return this.authService.refresh(req.user.id, req.user.refreshToken);
+    refresh(
+        @Req() req: { user: { id: number; sessionId: string; refreshToken: string } },
+    ) {
+        return this.authService.refresh(
+            req.user.id,
+            req.user.sessionId,
+            req.user.refreshToken,
+        );
+    }
+
+    @UseGuards(JwtRefreshGuard)
+    @HttpCode(200)
+    @Post('logout')
+    async logout(@Req() req: { user: { id: number; sessionId: string } }) {
+        await this.authService.logout(req.user.id, req.user.sessionId);
+        return { loggedOut: true };
     }
 
     @UseGuards(JwtAuthGuard)
     @HttpCode(200)
-    @Post('logout')
-    async logout(@Req() req: { user: { id: number } }) {
-        await this.authService.logout(req.user.id);
+    @Post('logout-all')
+    async logoutAll(@Req() req: { user: { id: number } }) {
+        await this.authService.logoutAll(req.user.id);
         return { loggedOut: true };
     }
 }
