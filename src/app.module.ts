@@ -12,17 +12,19 @@ import { AuthModule } from './auth/auth.module';
         const access = env.JWT_ACCESS_SECRET;
         const refresh = env.JWT_REFRESH_SECRET;
         if (
-            typeof access !== 'string' ||
-            typeof refresh !== 'string' ||
-            access.length < 32 ||
-            refresh.length < 32
+          typeof access !== 'string' ||
+          typeof refresh !== 'string' ||
+          access.length < 32 ||
+          refresh.length < 32
         ) {
           throw new Error(
-              'JWT_ACCESS_SECRET и JWT_REFRESH_SECRET должны быть заданы и быть не короче 32 символов',
+            'JWT_ACCESS_SECRET и JWT_REFRESH_SECRET должны быть заданы и быть не короче 32 символов',
           );
         }
         if (access === refresh) {
-          throw new Error('JWT_ACCESS_SECRET и JWT_REFRESH_SECRET должны отличаться');
+          throw new Error(
+            'JWT_ACCESS_SECRET и JWT_REFRESH_SECRET должны отличаться',
+          );
         }
         return env;
       },

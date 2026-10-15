@@ -5,26 +5,26 @@ import { User } from './entities/user.entity';
 
 @Injectable()
 export class UsersService {
-    constructor(
-        @InjectRepository(User)
-        private readonly usersRepo: Repository<User>,
-    ) {}
+  constructor(
+    @InjectRepository(User)
+    private readonly usersRepo: Repository<User>,
+  ) {}
 
-    findByEmail(email: string) {
-        return this.usersRepo.findOneBy({ email });
-    }
+  findByEmail(email: string) {
+    return this.usersRepo.findOneBy({ email });
+  }
 
-    findById(id: number) {
-        return this.usersRepo.findOneBy({ id });
-    }
-    findAll() {
-        return this.usersRepo.find({
-            select: { id: true, email: true, role: true },
-        });
-    }
+  findById(id: number) {
+    return this.usersRepo.findOneBy({ id });
+  }
+  findAll() {
+    return this.usersRepo.find({
+      select: { id: true, email: true, role: true },
+    });
+  }
 
-    create(email: string, passwordHash: string) {
-        const user = this.usersRepo.create({ email, passwordHash });
-        return this.usersRepo.save(user);
-    }
+  create(email: string, passwordHash: string) {
+    const user = this.usersRepo.create({ email, passwordHash });
+    return this.usersRepo.save(user);
+  }
 }

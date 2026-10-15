@@ -6,12 +6,12 @@ import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('users')
 export class UsersController {
-    constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) {}
 
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('admin')
-    @Get()
-    findAll() {
-        return this.usersService.findAll();
-    }
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get()
+  findAll() {
+    return this.usersService.findAll();
+  }
 }
