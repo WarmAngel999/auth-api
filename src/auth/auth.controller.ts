@@ -13,16 +13,18 @@ import { LocalAuthGuard } from './guards/local-auth.guard';
 import { User } from '../users/entities/user.entity';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
-
+import { ThrottlerGuard } from '@nestjs/throttler';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @UseGuards(ThrottlerGuard)
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
-  @UseGuards(LocalAuthGuard)
+
+  @UseGuards(ThrottlerGuard, LocalAuthGuard)
   @HttpCode(200)
   @Post('login')
   login(@Req() req: { user: User }) {

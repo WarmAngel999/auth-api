@@ -15,7 +15,7 @@ import { RegisterDto } from './dto/register.dto';
 import { RefreshToken } from './entities/refresh-token.entity';
 
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
+const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-timing', 10);
 @Injectable()
 export class AuthService {
   constructor(
@@ -49,9 +49,9 @@ export class AuthService {
 
   async validateUser(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
-    if (!user) return null;
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    return ok ? user : null;
+    const hash = user?.passwordHash ?? DUMMY_HASH;
+    const ok = await bcrypt.compare(password, hash);
+    return user && ok ? user : null;
   }
 
   login(user: User) {
