@@ -29,3 +29,17 @@ REST API на NestJS: регистрация, вход, JWT (access и refresh),
 
 Access-токен живёт 15 минут и передаётся в заголовке `Authorization: Bearer <token>`.
 Refresh-токен живёт 7 дней, его хэш хранится в базе.
+
+## Миграции
+
+В `NODE_ENV=development` схема создаётся автоматически (`synchronize`).
+В остальных окружениях приложение при старте само применяет миграции из `src/migrations`.
+
+Команды (работают через сборку проекта):
+```
+npm run migration:generate -- src/migrations/ИмяМиграции
+npm run migration:run
+npm run migration:revert
+```
+Миграцию генерируют на базе, схема которой создана только миграциями
+(не на базе разработки, где её ведёт `synchronize`).

@@ -40,6 +40,8 @@ import { AuthModule } from './auth/auth.module';
         database: config.get('DB_NAME'),
         autoLoadEntities: true,
         synchronize: config.get('NODE_EVN') === 'development',
+        migrations: [__dirname + '/migrations/*.js'],
+        migrationsRun: config.get('NODE_ENV') !== 'development',
       }),
     }),
     UsersModule,
