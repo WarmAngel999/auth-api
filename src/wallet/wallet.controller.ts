@@ -7,6 +7,9 @@ import {
   Post,
   Req,
   UseGuards,
+  DefaultValuePipe,
+  ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { WalletService } from './wallet.service';
@@ -44,5 +47,17 @@ export class WalletController {
       );
     }
     return this.wallet.transfer(req.user.id, dto.toUserId, dto.amount, key);
+  }
+  @Get('transactions')
+  history(
+    @Req() req: AuthRequest,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+  ) {
+    return this.wallet.history(
+      req.user.id,
+      Math.min(Math.max(limit, 1), 100),
+      Math.max(offset, 0),
+    );
   }
 }

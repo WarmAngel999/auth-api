@@ -110,4 +110,20 @@ export class WalletService {
       throw e;
     }
   }
+  async history(userId: number, limit: number, offset: number) {
+    const wallet = await this.getOrCreate(userId);
+    const rows = await this.dataSource.getRepository(Transfer).find({
+      where: [{ fromWalletId: wallet.id }, { toWalletId: wallet.id }],
+      order: { id: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
+    return rows.map((t) => ({
+      id: t.id,
+      type: t.type,
+      direction: t.toWalletId === wallet.id ? 'in' : 'out',
+      amount: t.amount,
+      createdAt: t.createdAt,
+    }));
+  }
 }
