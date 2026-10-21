@@ -19,16 +19,19 @@ export class Transfer {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Wallet)
+  @ManyToOne(() => Wallet, { nullable: true })
   @JoinColumn({ name: 'from_wallet_id' })
-  fromWallet: Wallet;
+  fromWallet: Wallet | null;
 
-  @Column({ name: 'from_wallet_id' })
-  fromWalletId: number;
+  @Column({ name: 'from_wallet_id', type: 'int', nullable: true })
+  fromWalletId: number | null;
 
   @ManyToOne(() => Wallet)
   @JoinColumn({ name: 'to_wallet_id' })
   toWallet: Wallet;
+
+  @Column({ type: 'varchar', length: 20, default: 'transfer' })
+  type: 'transfer' | 'deposit';
 
   @Column({ name: 'to_wallet_id' })
   toWalletId: number;
@@ -36,8 +39,8 @@ export class Transfer {
   @Column({ type: 'bigint', transformer: bigintTransformer })
   amount: number;
 
-  @Column({ name: 'idempotency_key', type: 'varchar', length: 100 })
-  idempotencyKey: string;
+  @Column({ name: 'idempotency_key', type: 'varchar', length: 100, nullable: true })
+  idempotencyKey: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
