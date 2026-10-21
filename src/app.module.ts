@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -39,13 +40,14 @@ import { AuthModule } from './auth/auth.module';
         password: config.get('DB_PASSWORD'),
         database: config.get('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: config.get('NODE_EVN') === 'development',
+        synchronize: false,
         migrations: [__dirname + '/migrations/*.js'],
         migrationsRun: config.get('NODE_ENV') !== 'development',
       }),
     }),
     UsersModule,
     AuthModule,
+    WalletModule,
   ],
 })
 export class AppModule {}
