@@ -14,6 +14,8 @@ const bigintTransformer = { to: (v: number) => v, from: (v: string) => Number(v)
 
 @Entity('transfers')
 @Index(['fromWalletId', 'idempotencyKey'], { unique: true })
+@Index(['fromWalletId', 'id'])
+@Index(['toWalletId', 'id'])
 @Check('"amount" > 0')
 export class Transfer {
   @PrimaryGeneratedColumn()
