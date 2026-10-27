@@ -52,12 +52,12 @@ export class WalletController {
   history(
     @Req() req: AuthRequest,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('cursor', new ParseIntPipe({ optional: true })) cursor?: number,
   ) {
     return this.wallet.history(
       req.user.id,
       Math.min(Math.max(limit, 1), 100),
-      Math.max(offset, 0),
+      cursor,
     );
   }
 }

@@ -110,20 +110,49 @@ export class WalletService {
       throw e;
     }
   }
-  async history(userId: number, limit: number, offset: number) {
+  async history(userId: number, limit: number, cursor?: number) {
     const wallet = await this.getOrCreate(userId);
-    const rows = await this.dataSource.getRepository(Transfer).find({
-      where: [{ fromWalletId: wallet.id }, { toWalletId: wallet.id }],
-      order: { id: 'DESC' },
-      take: limit,
-      skip: offset,
-    });
-    return rows.map((t) => ({
-      id: t.id,
-      type: t.type,
-      direction: t.toWalletId === wallet.id ? 'in' : 'out',
-      amount: t.amount,
-      createdAt: t.createdAt,
-    }));
+
+    const qb = this.dataSource
+      .createQueryBuilder()
+      .select('t.id', 'id')
+      .addSelect('t.type', 'type')
+      .addSelect('t.amount', 'amount')
+      .addSelect('t.createdAt', 'createdAt')
+      .addSelect('t.toWalletId', 'toWalletId')
+      .addSelect('u.email', 'counterparty')
+      .from(Transfer, 't')
+      .leftJoin(
+        Wallet,
+        'cw',
+        'cw.id = CASE WHEN t.toWalletId = :walletId THEN t.fromWalletId ELSE t.toWalletId END',
+      )
+      .leftJoin(User, 'u', 'u.id = cw.userId')
+      .where('(t.fromWalletId = :walletId OR t.toWalletId = :walletId)', {
+        walletId: wallet.id,
+      })
+      .orderBy('t.id', 'DESC')
+      .limit(limit + 1);
+
+    if (cursor) {
+      qb.andWhere('t.id < :cursor', { cursor });
+    }
+
+    const rows = await qb.getRawMany();
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+
+    return {
+      items: page.map((r) => ({
+        id: r.id,
+        type: r.type,
+        direction: Number(r.toWalletId) === wallet.id ? 'in' : 'out',
+        amount: Number(r.amount),
+        counterparty: r.counterparty,
+        createdAt: r.createdAt,
+      })),
+      nextCursor: hasMore ? page[page.length - 1].id : null,
+    };
   }
 }
