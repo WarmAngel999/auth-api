@@ -16,6 +16,7 @@ export class OutboxRelay implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    if (process.env.OUTBOX_RELAY_AUTOSTART === 'false') return;
     this.timer = setInterval(() => void this.tick(), 1000);
   }
 
@@ -23,7 +24,7 @@ export class OutboxRelay implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
-  private async tick() {
+  async tick() {
     if (this.running) return;
     this.running = true;
     try {
