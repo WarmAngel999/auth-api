@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
+import { EntityManager } from 'typeorm';
 
 @Injectable()
 export class UsersService {
@@ -23,8 +24,9 @@ export class UsersService {
     });
   }
 
-  create(email: string, passwordHash: string) {
-    const user = this.usersRepo.create({ email, passwordHash });
-    return this.usersRepo.save(user);
+  create(email: string, passwordHash: string, manager?: EntityManager) {
+    const repo = manager ? manager.getRepository(User) : this.usersRepo;
+    const user = repo.create({ email, passwordHash });
+    return repo.save(user);
   }
 }

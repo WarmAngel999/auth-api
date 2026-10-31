@@ -3,6 +3,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -13,6 +14,8 @@ import { UsersService } from '../users/users.service';
 import { User } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshToken } from './entities/refresh-token.entity';
+import { DataSource } from 'typeorm';
+import { OutboxEvent } from '../outbox/outbox-event.entity';
 
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-timing', 10);
@@ -24,6 +27,7 @@ export class AuthService {
     private readonly config: ConfigService,
     @InjectRepository(RefreshToken)
     private readonly refreshRepo: Repository<RefreshToken>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -35,7 +39,21 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
     try {
-      const user = await this.usersService.create(dto.email, passwordHash);
+      const user = await this.dataSource.transaction(async (m) => {
+        const created = await this.usersService.create(
+          dto.email,
+          passwordHash,
+          m,
+        );
+
+        await m.insert(OutboxEvent, {
+          type: 'user.registered',
+          payload: { userId: created.id, email: created.email },
+        });
+
+        return created;
+      });
+
       return { id: user.id, email: user.email, role: user.role };
     } catch (error) {
       if (this.isUniqueViolation(error)) {
