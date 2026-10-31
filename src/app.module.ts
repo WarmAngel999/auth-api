@@ -4,6 +4,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { WalletModule } from './wallet/wallet.module';
+import { BullModule } from '@nestjs/bullmq';
+import {MailModule} from './mail/mail.module';
+import {OutboxModule} from "./outbox/outbox.module";
+
 
 @Module({
   imports: [
@@ -30,6 +34,8 @@ import { WalletModule } from './wallet/wallet.module';
         return env;
       },
     }),
+    MailModule,
+    OutboxModule,
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -43,6 +49,15 @@ import { WalletModule } from './wallet/wallet.module';
         synchronize: false,
         migrations: [__dirname + '/migrations/*.js'],
         migrationsRun: config.get('NODE_ENV') !== 'development',
+      }),
+    }),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('REDIS_HOST', 'localhost'),
+          port: Number(config.get('REDIS_PORT', 6380)),
+        },
       }),
     }),
     UsersModule,
