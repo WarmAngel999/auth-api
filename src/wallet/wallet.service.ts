@@ -6,6 +6,7 @@ import { DataSource, In, Repository } from 'typeorm';
 import { Wallet } from './wallet.entity';
 import { Transfer } from './transfer.entity';
 import { User } from '../users/entities/user.entity';
+import {OutboxEvent} from "../outbox/outbox-event.entity";
 
 @Injectable()
 export class WalletService {
@@ -89,7 +90,8 @@ export class WalletService {
         // 4. списать, зачислить, записать в журнал
         await m.decrement(Wallet, { id: from.id }, 'balance', amount);
         await m.increment(Wallet, { id: to.id }, 'balance', amount);
-        return m.save(
+
+        const transfer = await m.save(
           m.create(Transfer, {
             type: 'transfer',
             fromWalletId: from.id,
@@ -98,6 +100,18 @@ export class WalletService {
             idempotencyKey: key,
           }),
         );
+
+        await m.insert(OutboxEvent, {
+          type: 'transfer.completed',
+          payload: {
+            transferId: transfer.id,
+            fromUserId,
+            toUserId,
+            amount,
+          },
+        });
+
+        return transfer;
       });
     } catch (e: any) {
       // страховка: гонка на уникальном индексе (код 23505) -> отдаём первый результат

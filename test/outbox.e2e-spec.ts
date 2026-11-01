@@ -128,4 +128,87 @@ describe('Outbox (e2e)', () => {
     expect((await events())[0].processed_at).not.toBeNull();
     expect(addSpy).toHaveBeenCalledTimes(2);
   });
+  it('cleanup removes only old processed events', async () => {
+    await dataSource.query(`
+    INSERT INTO outbox_events (type, payload, processed_at) VALUES
+      ('user.registered', '{}', now() - interval '10 days'),
+      ('user.registered', '{}', now() - interval '1 day'),
+      ('user.registered', '{}', NULL)
+  `);
+
+
+    await relay.cleanup(7);
+
+    const rows = await events();
+    expect(rows).toHaveLength(2);
+    expect(rows.filter((r: { processed_at: Date | null }) => r.processed_at === null)).toHaveLength(1);
+  });
+  describe('transfer events', () => {
+    let aliceToken: string;
+    let bobId: number;
+
+    const login = async (email: string) => {
+      const res = await http().post('/auth/login').send({ email, password: PASSWORD });
+      return res.body.accessToken as string;
+    };
+    const transfer = (amount: number, key: string) =>
+      http()
+        .post('/wallet/transfer')
+        .set({ Authorization: `Bearer ${aliceToken}` })
+        .set('Idempotency-Key', key)
+        .send({ toUserId: bobId, amount });
+
+    beforeEach(async () => {
+      await register('alice@example.com').expect(201);
+      bobId = (await register('bob@example.com').expect(201)).body.id;
+      aliceToken = await login('alice@example.com');
+      await http()
+        .post('/wallet/deposit')
+        .set({ Authorization: `Bearer ${aliceToken}` })
+        .send({ amount: 10000 })
+        .expect(201);
+
+      // убираем события регистрации, чтобы считать только переводы
+      await dataSource.query('TRUNCATE TABLE outbox_events RESTART IDENTITY');
+      addSpy.mockClear();
+    });
+
+    it('a transfer writes one transfer.completed event', async () => {
+      const res = await transfer(3000, 'k1').expect(201);
+
+      const rows = await events();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].type).toBe('transfer.completed');
+      expect(rows[0].payload).toMatchObject({
+        transferId: res.body.id,
+        toUserId: bobId,
+        amount: 3000,
+      });
+    });
+
+    it('a repeated idempotency key does not write a second event', async () => {
+      await transfer(3000, 'k1').expect(201);
+      await transfer(3000, 'k1').expect(201);
+
+      expect(await events()).toHaveLength(1);
+    });
+
+    it('a failed transfer writes no event', async () => {
+      await transfer(10001, 'k1').expect(400);
+
+      expect(await events()).toHaveLength(0);
+    });
+
+    it('relay puts the event into the notifications queue', async () => {
+      const res = await transfer(3000, 'k1').expect(201);
+
+      await relay.tick();
+
+      expect(addSpy).toHaveBeenCalledWith(
+        'transfer-completed',
+        expect.objectContaining({ transferId: res.body.id, amount: 3000 }),
+        expect.objectContaining({ jobId: `transfer-${res.body.id}` }),
+      );
+    });
+  });
 });
