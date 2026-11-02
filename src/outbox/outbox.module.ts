@@ -19,6 +19,17 @@ import {ConfigService} from "@nestjs/config";
         },
       }),
     }),
+    BullModule.registerQueueAsync({
+      name: 'notifications',
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('REDIS_HOST', '127.0.0.1'),
+          port: Number(config.get('REDIS_PORT', 6380)),
+          enableOfflineQueue: false,
+        },
+      }),
+    }),
   ],
   providers: [OutboxRelay],
   exports: [TypeOrmModule],

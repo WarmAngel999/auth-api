@@ -7,7 +7,7 @@ import { WalletModule } from './wallet/wallet.module';
 import { BullModule } from '@nestjs/bullmq';
 import {MailModule} from './mail/mail.module';
 import {OutboxModule} from "./outbox/outbox.module";
-
+import {NotificationsModule} from "./notifications/notifications.module";
 
 @Module({
   imports: [
@@ -36,6 +36,7 @@ import {OutboxModule} from "./outbox/outbox.module";
     }),
     MailModule,
     OutboxModule,
+    NotificationsModule,
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
