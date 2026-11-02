@@ -7,12 +7,14 @@ import { Wallet } from './wallet.entity';
 import { Transfer } from './transfer.entity';
 import { User } from '../users/entities/user.entity';
 import {OutboxEvent} from "../outbox/outbox-event.entity";
+import {HistoryCache} from "../cache/history-cache.service";
 
 @Injectable()
 export class WalletService {
   constructor(
     @InjectRepository(Wallet) private readonly wallets: Repository<Wallet>,
     private readonly dataSource: DataSource,
+    private readonly historyCache: HistoryCache,
   ) {}
 
   async getOrCreate(userId: number): Promise<Wallet> {
@@ -41,6 +43,7 @@ export class WalletService {
         idempotencyKey: null,
       });
     });
+    await this.historyCache.invalidate(userId);
     return this.wallets.findOneByOrFail({ id: wallet.id });
   }
   async transfer(
@@ -62,7 +65,7 @@ export class WalletService {
     const to = await this.getOrCreate(toUserId);
 
     try {
-      return await this.dataSource.transaction(async (m) => {
+      const result = await this.dataSource.transaction(async (m) => {
         // 1. блокируем оба кошелька, всегда в порядке возрастания id
         const locked = await m.find(Wallet, {
           where: { id: In([from.id, to.id]) },
@@ -113,6 +116,8 @@ export class WalletService {
 
         return transfer;
       });
+      await this.historyCache.invalidate(fromUserId, toUserId);
+      return result;
     } catch (e: any) {
       // страховка: гонка на уникальном индексе (код 23505) -> отдаём первый результат
       if (e?.driverError?.code === '23505') {
@@ -125,19 +130,21 @@ export class WalletService {
     }
   }
   async history(userId: number, limit: number, offset: number) {
-    const wallet = await this.getOrCreate(userId);
-    const rows = await this.dataSource.getRepository(Transfer).find({
-      where: [{ fromWalletId: wallet.id }, { toWalletId: wallet.id }],
-      order: { id: 'DESC' },
-      take: limit,
-      skip: offset,
+    return this.historyCache.getOrLoad(userId, limit, offset, async () => {
+      const wallet = await this.getOrCreate(userId);
+      const rows = await this.dataSource.getRepository(Transfer).find({
+        where: [{ fromWalletId: wallet.id }, { toWalletId: wallet.id }],
+        order: { id: 'DESC' },
+        take: limit,
+        skip: offset,
+      });
+      return rows.map((t) => ({
+        id: t.id,
+        type: t.type,
+        direction: t.toWalletId === wallet.id ? 'in' : 'out',
+        amount: t.amount,
+        createdAt: t.createdAt,
+      }));
     });
-    return rows.map((t) => ({
-      id: t.id,
-      type: t.type,
-      direction: t.toWalletId === wallet.id ? 'in' : 'out',
-      amount: t.amount,
-      createdAt: t.createdAt,
-    }));
   }
 }

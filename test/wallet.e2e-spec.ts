@@ -5,14 +5,17 @@ import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
-
+import { Repository } from 'typeorm';
+import { HistoryCache } from '../src/cache/history-cache.service';
 jest.setTimeout(30000);
+
 
 const PASSWORD = 'secret123';
 
 describe('Wallet (e2e)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
+  let historyCache: HistoryCache;
   let alice: { id: number; token: string };
   let bob: { id: number; token: string };
 
@@ -53,6 +56,7 @@ describe('Wallet (e2e)', () => {
     await app.listen(0);
 
     dataSource = app.get(DataSource);
+    historyCache = app.get(HistoryCache);
     if (dataSource.options.database !== 'auth_test') {
       throw new Error('E2E-тесты должны работать только с базой auth_test');
     }
@@ -61,6 +65,7 @@ describe('Wallet (e2e)', () => {
   });
 
   beforeEach(async () => {
+    await historyCache.flush();
     await dataSource.query(
       'TRUNCATE TABLE transfers, wallets, refresh_tokens, users RESTART IDENTITY CASCADE',
     );
@@ -189,6 +194,43 @@ describe('Wallet (e2e)', () => {
       expect(results.every((r) => r.status === 201)).toBe(true);
       expect(await balance(alice.token)).toBe(10000);
       expect(await balance(bob.token)).toBe(10000);
+    });
+  });
+  describe('history cache', () => {
+    const history = (token: string) =>
+      http().get('/wallet/transactions').set(bearer(token)).expect(200);
+
+    it('a second read does not query the database', async () => {
+      await deposit(alice.token, 1000).expect(201);
+      const spy = jest.spyOn(Repository.prototype, 'find');
+
+      await history(alice.token);
+      await history(alice.token);
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      spy.mockRestore();
+    });
+
+    it('a deposit is visible right after it', async () => {
+      expect((await history(alice.token)).body).toHaveLength(0);
+
+      await deposit(alice.token, 1000).expect(201);
+
+      expect((await history(alice.token)).body).toHaveLength(1);
+    });
+
+    it('a transfer resets the cache of both sides', async () => {
+      await deposit(alice.token, 10000).expect(201);
+      await history(alice.token);
+      await history(bob.token);
+
+      await transfer(alice.token, bob.id, 3000, 'k1').expect(201);
+
+      const a = await history(alice.token);
+      const b = await history(bob.token);
+      expect(a.body).toHaveLength(2);
+      expect(b.body).toHaveLength(1);
+      expect(b.body[0]).toMatchObject({ direction: 'in', amount: 3000 });
     });
   });
 });
