@@ -120,14 +120,13 @@ export class WalletService {
       .addSelect('t.amount', 'amount')
       .addSelect('t.createdAt', 'createdAt')
       .addSelect('t.toWalletId', 'toWalletId')
-      .addSelect('u.email', 'counterparty')
+      .addSelect('cw.userId', 'counterpartyUserId')
       .from(Transfer, 't')
       .leftJoin(
         Wallet,
         'cw',
         'cw.id = CASE WHEN t.toWalletId = :walletId THEN t.fromWalletId ELSE t.toWalletId END',
       )
-      .leftJoin(User, 'u', 'u.id = cw.userId')
       .where('(t.fromWalletId = :walletId OR t.toWalletId = :walletId)', {
         walletId: wallet.id,
       })
@@ -149,7 +148,8 @@ export class WalletService {
         type: r.type,
         direction: Number(r.toWalletId) === wallet.id ? 'in' : 'out',
         amount: Number(r.amount),
-        counterparty: r.counterparty,
+        counterpartyUserId:
+          r.counterpartyUserId === null ? null : Number(r.counterpartyUserId),
         createdAt: r.createdAt,
       })),
       nextCursor: hasMore ? page[page.length - 1].id : null,

@@ -19,8 +19,11 @@ describe('Wallet (e2e)', () => {
   const http = () => request(app.getHttpServer());
   const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-  const createUser = async (email: string) => {
+  const createUser = async (email: string, role: 'user' | 'admin' = 'user') => {
     await http().post('/auth/register').send({ email, password: PASSWORD });
+    if (role === 'admin') {
+      await dataSource.query('UPDATE users SET role = $1 WHERE email = $2', [role, email]);
+    }
     const res = await http().post('/auth/login').send({ email, password: PASSWORD });
     const token = res.body.accessToken as string;
     if (!token) throw new Error('login did not return accessToken');
@@ -62,8 +65,8 @@ describe('Wallet (e2e)', () => {
     await dataSource.query(
       'TRUNCATE TABLE transfers, wallets, refresh_tokens, users RESTART IDENTITY CASCADE',
     );
-    alice = await createUser('alice@example.com');
-    bob = await createUser('bob@example.com');
+    alice = await createUser('alice@example.com', 'admin');
+    bob = await createUser('bob@example.com', 'admin');
   });
 
   afterAll(async () => {
@@ -71,6 +74,11 @@ describe('Wallet (e2e)', () => {
   });
 
   describe('deposit', () => {
+    it('is forbidden for a regular user with 403', async () => {
+      const carol = await createUser('carol@example.com');
+      await deposit(carol.token, 1000).expect(403);
+      expect(await balance(carol.token)).toBe(0);
+    });
     it('increases the balance and writes a journal entry', async () => {
       await deposit(alice.token, 10000).expect(201);
       expect(await balance(alice.token)).toBe(10000);
@@ -78,6 +86,7 @@ describe('Wallet (e2e)', () => {
       const res = await http().get('/wallet/transactions').set(bearer(alice.token));
       expect(res.body.items).toHaveLength(1);
       expect(res.body.items[0]).toMatchObject({ type: 'deposit', direction: 'in', amount: 10000 });
+      expect(res.body.items[0]).not.toHaveProperty('counterparty');
     });
 
     it('rejects negative, zero and fractional amounts with 400', async () => {
@@ -106,6 +115,8 @@ describe('Wallet (e2e)', () => {
       const b = await http().get('/wallet/transactions').set(bearer(bob.token));
       expect(a.body.items[0]).toMatchObject({ type: 'transfer', direction: 'out', amount: 3000 });
       expect(b.body.items[0]).toMatchObject({ type: 'transfer', direction: 'in', amount: 3000 });
+      expect(a.body.items[0]).toMatchObject({ direction: 'out', counterpartyUserId: bob.id });
+      expect(b.body.items[0]).toMatchObject({ direction: 'in', counterpartyUserId: alice.id });
     });
 
     it('rejects an amount above the balance and changes nothing', async () => {

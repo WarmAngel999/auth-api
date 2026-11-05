@@ -17,6 +17,9 @@ import { DepositDto } from './dto/deposit.dto';
 import { TransferDto } from './dto/transfer.dto';
 // путь к guard оставь тот, который у тебя уже был в этом файле
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import {RolesGuard} from "../auth/guards/roles.guard";
+import {Roles} from "../auth/decorators/roles.decorator";
+import {Role} from "../users/role.enum";
 
 type AuthRequest = Request & { user: { id: number } };
 
@@ -31,6 +34,8 @@ export class WalletController {
   }
 
   @Post('deposit')
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin)
   deposit(@Req() req: AuthRequest, @Body() dto: DepositDto) {
     return this.wallet.deposit(req.user.id, dto.amount);
   }
