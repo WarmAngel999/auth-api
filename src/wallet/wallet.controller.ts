@@ -51,13 +51,16 @@ export class WalletController {
   @Get('transactions')
   history(
     @Req() req: AuthRequest,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
     @Query('cursor', new ParseIntPipe({ optional: true })) cursor?: number,
   ) {
-    return this.wallet.history(
-      req.user.id,
-      Math.min(Math.max(limit, 1), 100),
-      cursor,
-    );
+    const pageSize = limit ?? 20;
+    if (pageSize < 1 || pageSize > 100) {
+      throw new BadRequestException('limit must be between 1 and 100');
+    }
+    if (cursor !== undefined && cursor < 1) {
+      throw new BadRequestException('cursor must be a positive integer');
+    }
+    return this.wallet.history(req.user.id, pageSize, cursor);
   }
 }

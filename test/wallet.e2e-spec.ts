@@ -56,8 +56,6 @@ describe('Wallet (e2e)', () => {
     if (dataSource.options.database !== 'auth_test') {
       throw new Error('E2E-тесты должны работать только с базой auth_test');
     }
-    // пересоздаём схему по entity (в базе auth_test, проверено выше)
-    await dataSource.synchronize(true);
   });
 
   beforeEach(async () => {
@@ -78,8 +76,8 @@ describe('Wallet (e2e)', () => {
       expect(await balance(alice.token)).toBe(10000);
 
       const res = await http().get('/wallet/transactions').set(bearer(alice.token));
-      expect(res.body).toHaveLength(1);
-      expect(res.body[0]).toMatchObject({ type: 'deposit', direction: 'in', amount: 10000 });
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0]).toMatchObject({ type: 'deposit', direction: 'in', amount: 10000 });
     });
 
     it('rejects negative, zero and fractional amounts with 400', async () => {
@@ -106,8 +104,8 @@ describe('Wallet (e2e)', () => {
 
       const a = await http().get('/wallet/transactions').set(bearer(alice.token));
       const b = await http().get('/wallet/transactions').set(bearer(bob.token));
-      expect(a.body[0]).toMatchObject({ type: 'transfer', direction: 'out', amount: 3000 });
-      expect(b.body[0]).toMatchObject({ type: 'transfer', direction: 'in', amount: 3000 });
+      expect(a.body.items[0]).toMatchObject({ type: 'transfer', direction: 'out', amount: 3000 });
+      expect(b.body.items[0]).toMatchObject({ type: 'transfer', direction: 'in', amount: 3000 });
     });
 
     it('rejects an amount above the balance and changes nothing', async () => {
@@ -189,6 +187,66 @@ describe('Wallet (e2e)', () => {
       expect(results.every((r) => r.status === 201)).toBe(true);
       expect(await balance(alice.token)).toBe(10000);
       expect(await balance(bob.token)).toBe(10000);
+    });
+  });
+  describe('history pagination', () => {
+    const page = (token: string, limit?: number, cursor?: string | null) => {
+      const query: Record<string, string | number> = {};
+      if (limit !== undefined) query.limit = limit;
+      if (cursor) query.cursor = cursor;
+      return http().get('/wallet/transactions').query(query).set(bearer(token));
+    };
+
+    // у Alice 6 записей: 1 пополнение и 5 переводов Bob
+    beforeEach(async () => {
+      await deposit(alice.token, 10000).expect(201);
+      for (let i = 0; i < 5; i++) {
+        await transfer(alice.token, bob.id, 100, `p-${i}`).expect(201);
+      }
+    });
+
+    it('pages go without gaps and repeats', async () => {
+      const full = await page(alice.token, 100).expect(200);
+      const allIds: number[] = full.body.items.map((x: { id: number }) => x.id);
+      expect(allIds).toHaveLength(6);
+
+      const collected: number[] = [];
+      let cursor: string | null = null;
+      let guard = 0;
+      do {
+        const res: { body: { items: { id: number }[]; nextCursor: string | null } } = await page(
+          alice.token,
+          2,
+          cursor,
+        ).expect(200);
+        collected.push(...res.body.items.map((x) => x.id));
+        cursor = res.body.nextCursor;
+      } while (cursor && ++guard < 10);
+
+      expect(collected).toEqual(allIds);
+      expect(new Set(collected).size).toBe(collected.length);
+    });
+
+    it('the last page has nextCursor = null', async () => {
+      const res = await page(alice.token, 100).expect(200);
+      expect(res.body.items).toHaveLength(6);
+      expect(res.body.nextCursor).toBeNull();
+    });
+
+    it('nextCursor is null when the page fits exactly', async () => {
+      const res = await page(alice.token, 6).expect(200);
+      expect(res.body.items).toHaveLength(6);
+      expect(res.body.nextCursor).toBeNull();
+    });
+
+    it('rejects an invalid limit or cursor with 400', async () => {
+      await page(alice.token, 0).expect(400);
+      await page(alice.token, -1).expect(400);
+      await http()
+        .get('/wallet/transactions?limit=abc')
+        .set(bearer(alice.token))
+        .expect(400);
+      await page(alice.token, 2, 'not-a-cursor').expect(400);
     });
   });
 });
