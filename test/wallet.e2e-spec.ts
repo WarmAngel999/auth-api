@@ -22,20 +22,36 @@ describe('Wallet (e2e)', () => {
   const createUser = async (email: string, role: 'user' | 'admin' = 'user') => {
     await http().post('/auth/register').send({ email, password: PASSWORD });
     if (role === 'admin') {
-      await dataSource.query('UPDATE users SET role = $1 WHERE email = $2', [role, email]);
+      await dataSource.query('UPDATE users SET role = $1 WHERE email = $2', [
+        role,
+        email,
+      ]);
     }
-    const res = await http().post('/auth/login').send({ email, password: PASSWORD });
+    const res = await http()
+      .post('/auth/login')
+      .send({ email, password: PASSWORD });
     const token = res.body.accessToken as string;
     if (!token) throw new Error('login did not return accessToken');
-    const [row] = await dataSource.query('SELECT id FROM users WHERE email = $1', [email]);
+    const [row] = await dataSource.query(
+      'SELECT id FROM users WHERE email = $1',
+      [email],
+    );
     return { id: row.id as number, token };
   };
 
   const deposit = (token: string, amount: number) =>
     http().post('/wallet/deposit').set(bearer(token)).send({ amount });
 
-  const transfer = (token: string, toUserId: number, amount: number, key?: string) => {
-    const req = http().post('/wallet/transfer').set(bearer(token)).send({ toUserId, amount });
+  const transfer = (
+    token: string,
+    toUserId: number,
+    amount: number,
+    key?: string,
+  ) => {
+    const req = http()
+      .post('/wallet/transfer')
+      .set(bearer(token))
+      .send({ toUserId, amount });
     return key ? req.set('Idempotency-Key', key) : req;
   };
 
@@ -83,9 +99,15 @@ describe('Wallet (e2e)', () => {
       await deposit(alice.token, 10000).expect(201);
       expect(await balance(alice.token)).toBe(10000);
 
-      const res = await http().get('/wallet/transactions').set(bearer(alice.token));
+      const res = await http()
+        .get('/wallet/transactions')
+        .set(bearer(alice.token));
       expect(res.body.items).toHaveLength(1);
-      expect(res.body.items[0]).toMatchObject({ type: 'deposit', direction: 'in', amount: 10000 });
+      expect(res.body.items[0]).toMatchObject({
+        type: 'deposit',
+        direction: 'in',
+        amount: 10000,
+      });
       expect(res.body.items[0]).not.toHaveProperty('counterparty');
     });
 
@@ -125,12 +147,28 @@ describe('Wallet (e2e)', () => {
       expect(await balance(alice.token)).toBe(7000);
       expect(await balance(bob.token)).toBe(3000);
 
-      const a = await http().get('/wallet/transactions').set(bearer(alice.token));
+      const a = await http()
+        .get('/wallet/transactions')
+        .set(bearer(alice.token));
       const b = await http().get('/wallet/transactions').set(bearer(bob.token));
-      expect(a.body.items[0]).toMatchObject({ type: 'transfer', direction: 'out', amount: 3000 });
-      expect(b.body.items[0]).toMatchObject({ type: 'transfer', direction: 'in', amount: 3000 });
-      expect(a.body.items[0]).toMatchObject({ direction: 'out', counterpartyUserId: bob.id });
-      expect(b.body.items[0]).toMatchObject({ direction: 'in', counterpartyUserId: alice.id });
+      expect(a.body.items[0]).toMatchObject({
+        type: 'transfer',
+        direction: 'out',
+        amount: 3000,
+      });
+      expect(b.body.items[0]).toMatchObject({
+        type: 'transfer',
+        direction: 'in',
+        amount: 3000,
+      });
+      expect(a.body.items[0]).toMatchObject({
+        direction: 'out',
+        counterpartyUserId: bob.id,
+      });
+      expect(b.body.items[0]).toMatchObject({
+        direction: 'in',
+        counterpartyUserId: alice.id,
+      });
     });
 
     it('rejects an amount above the balance and changes nothing', async () => {
@@ -141,7 +179,9 @@ describe('Wallet (e2e)', () => {
 
     it('does not charge twice for a repeated idempotency key', async () => {
       const first = await transfer(alice.token, bob.id, 3000, 'k1').expect(201);
-      const second = await transfer(alice.token, bob.id, 3000, 'k1').expect(201);
+      const second = await transfer(alice.token, bob.id, 3000, 'k1').expect(
+        201,
+      );
 
       expect(second.body.id).toBe(first.body.id);
       expect(await balance(alice.token)).toBe(7000);
@@ -168,7 +208,9 @@ describe('Wallet (e2e)', () => {
       await deposit(alice.token, 10000).expect(201);
 
       const results = await Promise.all(
-        Array.from({ length: 10 }, () => transfer(alice.token, bob.id, 5000, 'same-key')),
+        Array.from({ length: 10 }, () =>
+          transfer(alice.token, bob.id, 5000, 'same-key'),
+        ),
       );
 
       expect(results.every((r) => r.status === 201)).toBe(true);
@@ -186,7 +228,9 @@ describe('Wallet (e2e)', () => {
       await deposit(alice.token, 10000).expect(201);
 
       const results = await Promise.all(
-        Array.from({ length: 10 }, (_, i) => transfer(alice.token, bob.id, 3000, `key-${i}`)),
+        Array.from({ length: 10 }, (_, i) =>
+          transfer(alice.token, bob.id, 3000, `key-${i}`),
+        ),
       );
 
       const ok = results.filter((r) => r.status === 201).length;
@@ -239,11 +283,9 @@ describe('Wallet (e2e)', () => {
       let cursor: string | null = null;
       let guard = 0;
       do {
-        const res: { body: { items: { id: number }[]; nextCursor: string | null } } = await page(
-          alice.token,
-          2,
-          cursor,
-        ).expect(200);
+        const res: {
+          body: { items: { id: number }[]; nextCursor: string | null };
+        } = await page(alice.token, 2, cursor).expect(200);
         collected.push(...res.body.items.map((x) => x.id));
         cursor = res.body.nextCursor;
       } while (cursor && ++guard < 10);

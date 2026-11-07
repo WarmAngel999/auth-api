@@ -10,6 +10,8 @@ export class TransferNoSelf1793530000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "transfers" DROP CONSTRAINT "chk_transfers_no_self"`);
+    await queryRunner.query(
+      `ALTER TABLE "transfers" DROP CONSTRAINT "chk_transfers_no_self"`,
+    );
   }
 }

@@ -10,7 +10,10 @@ import {
 } from 'typeorm';
 import { Wallet } from './wallet.entity';
 
-const bigintTransformer = { to: (v: number) => v, from: (v: string) => Number(v) };
+const bigintTransformer = {
+  to: (v: number) => v,
+  from: (v: string) => Number(v),
+};
 
 @Entity('transfers')
 @Index(['fromWalletId', 'idempotencyKey'], { unique: true })
@@ -41,7 +44,12 @@ export class Transfer {
   @Column({ type: 'bigint', transformer: bigintTransformer })
   amount: number;
 
-  @Column({ name: 'idempotency_key', type: 'varchar', length: 100, nullable: true })
+  @Column({
+    name: 'idempotency_key',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
   idempotencyKey: string | null;
 
   @CreateDateColumn({ name: 'created_at' })

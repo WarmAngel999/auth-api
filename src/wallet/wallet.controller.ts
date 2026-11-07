@@ -7,7 +7,6 @@ import {
   Post,
   Req,
   UseGuards,
-  DefaultValuePipe,
   ParseIntPipe,
   Query,
 } from '@nestjs/common';
@@ -17,9 +16,9 @@ import { DepositDto } from './dto/deposit.dto';
 import { TransferDto } from './dto/transfer.dto';
 // путь к guard оставь тот, который у тебя уже был в этом файле
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import {RolesGuard} from "../auth/guards/roles.guard";
-import {Roles} from "../auth/decorators/roles.decorator";
-import {Role} from "../users/role.enum";
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../users/role.enum';
 
 type AuthRequest = Request & { user: { id: number } };
 

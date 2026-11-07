@@ -1,5 +1,8 @@
 import {
-  BadRequestException, ConflictException, Injectable, NotFoundException,
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
@@ -54,7 +57,9 @@ export class WalletService {
     if (fromUserId === toUserId) {
       throw new BadRequestException('cannot transfer to yourself');
     }
-    const toExists = await this.dataSource.getRepository(User).existsBy({ id: toUserId });
+    const toExists = await this.dataSource
+      .getRepository(User)
+      .existsBy({ id: toUserId });
     if (!toExists) throw new NotFoundException('recipient not found');
 
     const from = await this.getOrCreate(fromUserId);
@@ -76,7 +81,9 @@ export class WalletService {
         });
         if (existing) {
           if (existing.toWalletId !== to.id || existing.amount !== amount) {
-            throw new ConflictException('idempotency key reused with different data');
+            throw new ConflictException(
+              'idempotency key reused with different data',
+            );
           }
           return existing;
         }
@@ -156,7 +163,9 @@ export class WalletService {
         direction: Number(r.to_wallet_id) === wallet.id ? 'in' : 'out',
         amount: Number(r.amount),
         counterpartyUserId:
-          r.counterparty_user_id === null ? null : Number(r.counterparty_user_id),
+          r.counterparty_user_id === null
+            ? null
+            : Number(r.counterparty_user_id),
         createdAt: r.created_at,
       })),
       nextCursor: hasMore ? Number(page[page.length - 1].id) : null,

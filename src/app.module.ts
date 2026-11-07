@@ -41,9 +41,12 @@ import { WalletModule } from './wallet/wallet.module';
         database: config.get('DB_NAME'),
         autoLoadEntities: true,
         synchronize: false,
-        logging: ['query'],
-        migrations: [__dirname + '/migrations/*.js'],
-        migrationsRun: config.get('NODE_ENV') !== 'development',
+        logging:
+          config.get('NODE_ENV') === 'development'
+            ? ['query', 'error']
+            : ['error'],
+        migrations: [__dirname + '/migrations/*.{ts,js}'],
+        migrationsRun: true,
       }),
     }),
     UsersModule,
