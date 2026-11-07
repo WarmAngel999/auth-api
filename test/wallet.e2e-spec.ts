@@ -98,6 +98,20 @@ describe('Wallet (e2e)', () => {
     it('requires a token', async () => {
       await http().post('/wallet/deposit').send({ amount: 100 }).expect(401);
     });
+    it('database rejects a transfer to the same wallet', async () => {
+      await deposit(alice.token, 1000).expect(201);
+      const [{ id: walletId }] = await dataSource.query(
+        'SELECT id FROM wallets WHERE user_id = $1',
+        [alice.id],
+      );
+      await expect(
+        dataSource.query(
+          `INSERT INTO transfers (from_wallet_id, to_wallet_id, type, amount, idempotency_key)
+       VALUES ($1, $1, 'transfer', 100, 'self')`,
+          [walletId],
+        ),
+      ).rejects.toThrow(/chk_transfers_no_self/);
+    });
   });
 
   describe('transfer', () => {

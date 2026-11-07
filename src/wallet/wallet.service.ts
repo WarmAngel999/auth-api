@@ -113,46 +113,53 @@ export class WalletService {
   async history(userId: number, limit: number, cursor?: number) {
     const wallet = await this.getOrCreate(userId);
 
-    const qb = this.dataSource
-      .createQueryBuilder()
-      .select('t.id', 'id')
-      .addSelect('t.type', 'type')
-      .addSelect('t.amount', 'amount')
-      .addSelect('t.createdAt', 'createdAt')
-      .addSelect('t.toWalletId', 'toWalletId')
-      .addSelect('cw.userId', 'counterpartyUserId')
-      .from(Transfer, 't')
-      .leftJoin(
-        Wallet,
-        'cw',
-        'cw.id = CASE WHEN t.toWalletId = :walletId THEN t.fromWalletId ELSE t.toWalletId END',
-      )
-      .where('(t.fromWalletId = :walletId OR t.toWalletId = :walletId)', {
-        walletId: wallet.id,
-      })
-      .orderBy('t.id', 'DESC')
-      .limit(limit + 1);
-
-    if (cursor) {
-      qb.andWhere('t.id < :cursor', { cursor });
-    }
-
-    const rows = await qb.getRawMany();
+    const rows: Array<{
+      id: string;
+      type: string;
+      amount: string;
+      created_at: Date;
+      to_wallet_id: string | null;
+      counterparty_user_id: string | null;
+    }> = await this.dataSource.query(
+      `
+    SELECT p.id, p.type, p.amount, p.created_at, p.to_wallet_id,
+           cw.user_id AS counterparty_user_id
+    FROM (
+      SELECT * FROM (
+        (SELECT id, type, amount, created_at, from_wallet_id, to_wallet_id
+         FROM transfers
+         WHERE from_wallet_id = $1 AND ($2::bigint IS NULL OR id < $2)
+         ORDER BY id DESC LIMIT $3)
+        UNION ALL
+        (SELECT id, type, amount, created_at, from_wallet_id, to_wallet_id
+         FROM transfers
+         WHERE to_wallet_id = $1 AND ($2::bigint IS NULL OR id < $2)
+         ORDER BY id DESC LIMIT $3)
+      ) u
+      ORDER BY id DESC
+      LIMIT $3
+    ) p
+    LEFT JOIN wallets cw
+      ON cw.id = CASE WHEN p.to_wallet_id = $1 THEN p.from_wallet_id ELSE p.to_wallet_id END
+    ORDER BY p.id DESC
+    `,
+      [wallet.id, cursor ?? null, limit + 1],
+    );
 
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
 
     return {
       items: page.map((r) => ({
-        id: r.id,
+        id: Number(r.id),
         type: r.type,
-        direction: Number(r.toWalletId) === wallet.id ? 'in' : 'out',
+        direction: Number(r.to_wallet_id) === wallet.id ? 'in' : 'out',
         amount: Number(r.amount),
         counterpartyUserId:
-          r.counterpartyUserId === null ? null : Number(r.counterpartyUserId),
-        createdAt: r.createdAt,
+          r.counterparty_user_id === null ? null : Number(r.counterparty_user_id),
+        createdAt: r.created_at,
       })),
-      nextCursor: hasMore ? page[page.length - 1].id : null,
+      nextCursor: hasMore ? Number(page[page.length - 1].id) : null,
     };
   }
 }
