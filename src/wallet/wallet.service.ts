@@ -9,12 +9,15 @@ import { DataSource, In, Repository } from 'typeorm';
 import { Wallet } from './wallet.entity';
 import { Transfer } from './transfer.entity';
 import { User } from '../users/entities/user.entity';
+import { OutboxEvent } from '../outbox/outbox-event.entity';
+import { HistoryCache } from '../cache/history-cache.service';
 
 @Injectable()
 export class WalletService {
   constructor(
     @InjectRepository(Wallet) private readonly wallets: Repository<Wallet>,
     private readonly dataSource: DataSource,
+    private readonly historyCache: HistoryCache,
   ) {}
 
   async getOrCreate(userId: number): Promise<Wallet> {
@@ -43,6 +46,7 @@ export class WalletService {
         idempotencyKey: null,
       });
     });
+    await this.historyCache.invalidate(userId);
     return this.wallets.findOneByOrFail({ id: wallet.id });
   }
   async transfer(
@@ -66,7 +70,7 @@ export class WalletService {
     const to = await this.getOrCreate(toUserId);
 
     try {
-      return await this.dataSource.transaction(async (m) => {
+      const result = await this.dataSource.transaction(async (m) => {
         // 1. блокируем оба кошелька, всегда в порядке возрастания id
         const locked = await m.find(Wallet, {
           where: { id: In([from.id, to.id]) },
@@ -75,7 +79,7 @@ export class WalletService {
         });
         const src = locked.find((w) => w.id === from.id)!;
 
-        // 2. повтор запроса? уже под блокировкой
+        // 2. повтор запроса? проверяем уже под блокировкой
         const existing = await m.findOne(Transfer, {
           where: { fromWalletId: from.id, idempotencyKey: key },
         });
@@ -96,7 +100,8 @@ export class WalletService {
         // 4. списать, зачислить, записать в журнал
         await m.decrement(Wallet, { id: from.id }, 'balance', amount);
         await m.increment(Wallet, { id: to.id }, 'balance', amount);
-        return m.save(
+
+        const transfer = await m.save(
           m.create(Transfer, {
             type: 'transfer',
             fromWalletId: from.id,
@@ -105,7 +110,17 @@ export class WalletService {
             idempotencyKey: key,
           }),
         );
+
+        // 5. событие в той же транзакции: либо всё вместе, либо ничего
+        await m.insert(OutboxEvent, {
+          type: 'transfer.completed',
+          payload: { transferId: transfer.id, fromUserId, toUserId, amount },
+        });
+
+        return transfer;
       });
+      await this.historyCache.invalidate(fromUserId, toUserId);
+      return result;
     } catch (e: any) {
       // страховка: гонка на уникальном индексе (код 23505) -> отдаём первый результат
       if (e?.driverError?.code === '23505') {
@@ -118,57 +133,59 @@ export class WalletService {
     }
   }
   async history(userId: number, limit: number, cursor?: number) {
-    const wallet = await this.getOrCreate(userId);
+    return this.historyCache.getOrLoad(userId, limit, cursor ?? 0, async () => {
+      const wallet = await this.getOrCreate(userId);
 
-    const rows: Array<{
-      id: string;
-      type: string;
-      amount: string;
-      created_at: Date;
-      to_wallet_id: string | null;
-      counterparty_user_id: string | null;
-    }> = await this.dataSource.query(
-      `
-    SELECT p.id, p.type, p.amount, p.created_at, p.to_wallet_id,
-           cw.user_id AS counterparty_user_id
-    FROM (
-      SELECT * FROM (
-        (SELECT id, type, amount, created_at, from_wallet_id, to_wallet_id
-         FROM transfers
-         WHERE from_wallet_id = $1 AND ($2::bigint IS NULL OR id < $2)
-         ORDER BY id DESC LIMIT $3)
-        UNION ALL
-        (SELECT id, type, amount, created_at, from_wallet_id, to_wallet_id
-         FROM transfers
-         WHERE to_wallet_id = $1 AND ($2::bigint IS NULL OR id < $2)
-         ORDER BY id DESC LIMIT $3)
-      ) u
-      ORDER BY id DESC
-      LIMIT $3
-    ) p
-    LEFT JOIN wallets cw
-      ON cw.id = CASE WHEN p.to_wallet_id = $1 THEN p.from_wallet_id ELSE p.to_wallet_id END
-    ORDER BY p.id DESC
-    `,
-      [wallet.id, cursor ?? null, limit + 1],
-    );
+      const rows: Array<{
+        id: string;
+        type: string;
+        amount: string;
+        created_at: Date;
+        to_wallet_id: string | null;
+        counterparty_user_id: string | null;
+      }> = await this.dataSource.query(
+        `
+      SELECT p.id, p.type, p.amount, p.created_at, p.to_wallet_id,
+             cw.user_id AS counterparty_user_id
+      FROM (
+        SELECT * FROM (
+          (SELECT id, type, amount, created_at, from_wallet_id, to_wallet_id
+           FROM transfers
+           WHERE from_wallet_id = $1 AND ($2::bigint IS NULL OR id < $2)
+           ORDER BY id DESC LIMIT $3)
+          UNION ALL
+          (SELECT id, type, amount, created_at, from_wallet_id, to_wallet_id
+           FROM transfers
+           WHERE to_wallet_id = $1 AND ($2::bigint IS NULL OR id < $2)
+           ORDER BY id DESC LIMIT $3)
+        ) u
+        ORDER BY id DESC
+        LIMIT $3
+      ) p
+      LEFT JOIN wallets cw
+        ON cw.id = CASE WHEN p.to_wallet_id = $1 THEN p.from_wallet_id ELSE p.to_wallet_id END
+      ORDER BY p.id DESC
+      `,
+        [wallet.id, cursor ?? null, limit + 1],
+      );
 
-    const hasMore = rows.length > limit;
-    const page = hasMore ? rows.slice(0, limit) : rows;
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
 
-    return {
-      items: page.map((r) => ({
-        id: Number(r.id),
-        type: r.type,
-        direction: Number(r.to_wallet_id) === wallet.id ? 'in' : 'out',
-        amount: Number(r.amount),
-        counterpartyUserId:
-          r.counterparty_user_id === null
-            ? null
-            : Number(r.counterparty_user_id),
-        createdAt: r.created_at,
-      })),
-      nextCursor: hasMore ? Number(page[page.length - 1].id) : null,
-    };
+      return {
+        items: page.map((r) => ({
+          id: Number(r.id),
+          type: r.type,
+          direction: Number(r.to_wallet_id) === wallet.id ? 'in' : 'out',
+          amount: Number(r.amount),
+          counterpartyUserId:
+            r.counterparty_user_id === null
+              ? null
+              : Number(r.counterparty_user_id),
+          createdAt: r.created_at,
+        })),
+        nextCursor: hasMore ? Number(page[page.length - 1].id) : null,
+      };
+    });
   }
 }

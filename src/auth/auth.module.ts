@@ -10,6 +10,8 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerStorageModule } from '../throttler/throttler-storage.module';
+import { RedisThrottlerStorage } from '../throttler/redis-throttler.storage';
 
 @Module({
   imports: [
@@ -17,7 +19,14 @@ import { ThrottlerModule } from '@nestjs/throttler';
     PassportModule,
     JwtModule.register({}),
     TypeOrmModule.forFeature([RefreshToken]),
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
+    ThrottlerModule.forRootAsync({
+      imports: [ThrottlerStorageModule],
+      inject: [RedisThrottlerStorage],
+      useFactory: (storage: RedisThrottlerStorage) => ({
+        throttlers: [{ ttl: 60000, limit: 10 }],
+        storage,
+      }),
+    }),
   ],
   providers: [AuthService, LocalStrategy, JwtStrategy, JwtRefreshStrategy],
   controllers: [AuthController],
