@@ -25,7 +25,7 @@ describe('Outbox (e2e)', () => {
     http().post('/auth/register').send({ email, password: PASSWORD });
   const events = () =>
     dataSource.query(
-      'SELECT id, type, payload, processed_at FROM outbox_events ORDER BY id',
+      'SELECT id, type, payload, published_at FROM outbox_events ORDER BY created_at',
     );
 
   beforeAll(async () => {
@@ -72,7 +72,7 @@ describe('Outbox (e2e)', () => {
       userId: res.body.id,
       email: 'a@example.com',
     });
-    expect(rows[0].processed_at).toBeNull();
+    expect(rows[0].published_at).toBeNull();
   });
 
   it('a duplicate email returns 409 and adds no second event', async () => {
@@ -108,7 +108,7 @@ describe('Outbox (e2e)', () => {
       expect.objectContaining({ jobId: `confirm-${res.body.id}` }),
     );
     const [row] = await events();
-    expect(row.processed_at).not.toBeNull();
+    expect(row.published_at).not.toBeNull();
   });
 
   it('does not send a processed event again', async () => {
@@ -125,15 +125,15 @@ describe('Outbox (e2e)', () => {
     await register('a@example.com').expect(201);
 
     await relay.tick(); // очередь недоступна
-    expect((await events())[0].processed_at).toBeNull();
+    expect((await events())[0].published_at).toBeNull();
 
     await relay.tick(); // очередь снова работает
-    expect((await events())[0].processed_at).not.toBeNull();
+    expect((await events())[0].published_at).not.toBeNull();
     expect(addSpy).toHaveBeenCalledTimes(2);
   });
   it('cleanup removes only old processed events', async () => {
     await dataSource.query(`
-    INSERT INTO outbox_events (type, payload, processed_at) VALUES
+    INSERT INTO outbox_events (type, payload, published_at) VALUES
       ('user.registered', '{}', now() - interval '10 days'),
       ('user.registered', '{}', now() - interval '1 day'),
       ('user.registered', '{}', NULL)
@@ -145,7 +145,7 @@ describe('Outbox (e2e)', () => {
     expect(rows).toHaveLength(2);
     expect(
       rows.filter(
-        (r: { processed_at: Date | null }) => r.processed_at === null,
+        (r: { published_at: Date | null }) => r.published_at === null,
       ),
     ).toHaveLength(1);
   });
@@ -217,10 +217,11 @@ describe('Outbox (e2e)', () => {
 
       await relay.tick();
 
+      const [event] = await events();
       expect(addSpy).toHaveBeenCalledWith(
         'transfer-completed',
         expect.objectContaining({ transferId: res.body.id, amount: 3000 }),
-        expect.objectContaining({ jobId: `transfer-${res.body.id}` }),
+        expect.objectContaining({ jobId: event.id }),
       );
     });
   });
