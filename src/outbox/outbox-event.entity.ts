@@ -3,13 +3,16 @@ import {
   CreateDateColumn,
   Entity,
   Index,
-  PrimaryGeneratedColumn,
+  PrimaryColumn,
 } from 'typeorm';
 
 @Entity('outbox_events')
+@Index('idx_outbox_unpublished', ['createdAt'], {
+  where: '"published_at" IS NULL',
+})
 export class OutboxEvent {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryColumn({ type: 'uuid', default: () => 'gen_random_uuid()' })
+  id: string;
 
   @Column()
   type: string;
@@ -20,7 +23,6 @@ export class OutboxEvent {
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @Index('idx_outbox_unprocessed', { where: '"processed_at" IS NULL' })
-  @Column({ name: 'processed_at', type: 'timestamptz', nullable: true })
-  processedAt: Date | null;
+  @Column({ name: 'published_at', type: 'timestamptz', nullable: true })
+  publishedAt: Date | null;
 }
