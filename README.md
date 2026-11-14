@@ -5,16 +5,19 @@ REST API на NestJS: регистрация, вход, JWT (access и refresh),
 
 ## Запуск
 
-1. Поднять PostgreSQL (например, в Docker) и создать базу `auth`:
+1. Скопировать `.env.example` в `.env` (в PowerShell: `Copy-Item .env.example .env`).
+2. Поднять Postgres и Redis:
 ```
-   docker run --name auth-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=auth -p 5432:5432 -d postgres:16
+docker compose up -d
 ```
-2. Скопировать `.env.example` в `.env` и заполнить значения (секреты JWT должны быть длинными случайными строками).
+При первом запуске создаются базы `auth` и `auth_test`.
 3. Установить зависимости и запустить:
 ```
-   npm install
-   npm run start:dev
+npm ci
+npm run start:dev
 ```
+Миграции применяются при старте приложения автоматически.
+Если порты 5432 или 6379 на компьютере заняты, поменяй `DB_PORT` и `REDIS_PORT` в `.env`: compose читает их оттуда.
 
 ## Эндпоинты
 
