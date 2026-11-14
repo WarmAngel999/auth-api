@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { DataSource } from 'typeorm';
@@ -41,17 +46,23 @@ export class OutboxRelay implements OnModuleInit, OnModuleDestroy {
           .setLock('pessimistic_write')
           .setOnLocked('skip_locked')
           .getMany();
-          if (events.length > 0) {
-            this.logger.log(`Найдено событий: ${events.length}`);
-          }
+        if (events.length > 0) {
+          this.logger.log(`Найдено событий: ${events.length}`);
+        }
 
         for (const event of events) {
           await this.dispatch(event);
-          await m.update(OutboxEvent, { id: event.id }, { processedAt: new Date() });
+          await m.update(
+            OutboxEvent,
+            { id: event.id },
+            { processedAt: new Date() },
+          );
         }
       });
     } catch (error) {
-      this.logger.warn(`Не удалось отправить события: ${(error as Error).message}`);
+      this.logger.warn(
+        `Не удалось отправить события: ${(error as Error).message}`,
+      );
     } finally {
       this.running = false;
     }
@@ -77,7 +88,10 @@ export class OutboxRelay implements OnModuleInit, OnModuleDestroy {
   private async dispatch(event: OutboxEvent) {
     switch (event.type) {
       case 'user.registered': {
-        const { userId, email } = event.payload as { userId: number; email: string };
+        const { userId, email } = event.payload as {
+          userId: number;
+          email: string;
+        };
         await this.withTimeout(
           this.mailQueue.add(
             'confirm-email',
@@ -131,7 +145,9 @@ export class OutboxRelay implements OnModuleInit, OnModuleDestroy {
         this.logger.log(`Удалено обработанных событий: ${result.affected}`);
       }
     } catch (error) {
-      this.logger.warn(`Не удалось очистить outbox: ${(error as Error).message}`);
+      this.logger.warn(
+        `Не удалось очистить outbox: ${(error as Error).message}`,
+      );
     }
   }
 }

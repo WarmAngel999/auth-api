@@ -1,13 +1,16 @@
 import {
-  BadRequestException, ConflictException, Injectable, NotFoundException,
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { Wallet } from './wallet.entity';
 import { Transfer } from './transfer.entity';
 import { User } from '../users/entities/user.entity';
-import {OutboxEvent} from "../outbox/outbox-event.entity";
-import {HistoryCache} from "../cache/history-cache.service";
+import { OutboxEvent } from '../outbox/outbox-event.entity';
+import { HistoryCache } from '../cache/history-cache.service';
 
 @Injectable()
 export class WalletService {
@@ -58,7 +61,9 @@ export class WalletService {
     if (fromUserId === toUserId) {
       throw new BadRequestException('cannot transfer to yourself');
     }
-    const toExists = await this.dataSource.getRepository(User).existsBy({ id: toUserId });
+    const toExists = await this.dataSource
+      .getRepository(User)
+      .existsBy({ id: toUserId });
     if (!toExists) throw new NotFoundException('recipient not found');
 
     const from = await this.getOrCreate(fromUserId);
@@ -74,13 +79,15 @@ export class WalletService {
         });
         const src = locked.find((w) => w.id === from.id)!;
 
-        // 2. повтор запроса? уже под блокировкой
+        // 2. повтор запроса? проверяем уже под блокировкой
         const existing = await m.findOne(Transfer, {
           where: { fromWalletId: from.id, idempotencyKey: key },
         });
         if (existing) {
           if (existing.toWalletId !== to.id || existing.amount !== amount) {
-            throw new ConflictException('idempotency key reused with different data');
+            throw new ConflictException(
+              'idempotency key reused with different data',
+            );
           }
           return existing;
         }
@@ -104,14 +111,10 @@ export class WalletService {
           }),
         );
 
+        // 5. событие в той же транзакции: либо всё вместе, либо ничего
         await m.insert(OutboxEvent, {
           type: 'transfer.completed',
-          payload: {
-            transferId: transfer.id,
-            fromUserId,
-            toUserId,
-            amount,
-          },
+          payload: { transferId: transfer.id, fromUserId, toUserId, amount },
         });
 
         return transfer;
@@ -129,22 +132,60 @@ export class WalletService {
       throw e;
     }
   }
-  async history(userId: number, limit: number, offset: number) {
-    return this.historyCache.getOrLoad(userId, limit, offset, async () => {
+  async history(userId: number, limit: number, cursor?: number) {
+    return this.historyCache.getOrLoad(userId, limit, cursor ?? 0, async () => {
       const wallet = await this.getOrCreate(userId);
-      const rows = await this.dataSource.getRepository(Transfer).find({
-        where: [{ fromWalletId: wallet.id }, { toWalletId: wallet.id }],
-        order: { id: 'DESC' },
-        take: limit,
-        skip: offset,
-      });
-      return rows.map((t) => ({
-        id: t.id,
-        type: t.type,
-        direction: t.toWalletId === wallet.id ? 'in' : 'out',
-        amount: t.amount,
-        createdAt: t.createdAt,
-      }));
+
+      const rows: Array<{
+        id: string;
+        type: string;
+        amount: string;
+        created_at: Date;
+        to_wallet_id: string | null;
+        counterparty_user_id: string | null;
+      }> = await this.dataSource.query(
+        `
+      SELECT p.id, p.type, p.amount, p.created_at, p.to_wallet_id,
+             cw.user_id AS counterparty_user_id
+      FROM (
+        SELECT * FROM (
+          (SELECT id, type, amount, created_at, from_wallet_id, to_wallet_id
+           FROM transfers
+           WHERE from_wallet_id = $1 AND ($2::bigint IS NULL OR id < $2)
+           ORDER BY id DESC LIMIT $3)
+          UNION ALL
+          (SELECT id, type, amount, created_at, from_wallet_id, to_wallet_id
+           FROM transfers
+           WHERE to_wallet_id = $1 AND ($2::bigint IS NULL OR id < $2)
+           ORDER BY id DESC LIMIT $3)
+        ) u
+        ORDER BY id DESC
+        LIMIT $3
+      ) p
+      LEFT JOIN wallets cw
+        ON cw.id = CASE WHEN p.to_wallet_id = $1 THEN p.from_wallet_id ELSE p.to_wallet_id END
+      ORDER BY p.id DESC
+      `,
+        [wallet.id, cursor ?? null, limit + 1],
+      );
+
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
+
+      return {
+        items: page.map((r) => ({
+          id: Number(r.id),
+          type: r.type,
+          direction: Number(r.to_wallet_id) === wallet.id ? 'in' : 'out',
+          amount: Number(r.amount),
+          counterpartyUserId:
+            r.counterparty_user_id === null
+              ? null
+              : Number(r.counterparty_user_id),
+          createdAt: r.created_at,
+        })),
+        nextCursor: hasMore ? Number(page[page.length - 1].id) : null,
+      };
     });
   }
 }

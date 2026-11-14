@@ -26,7 +26,12 @@ export class HistoryCache implements OnModuleDestroy {
     return `${this.prefix}wallet:history:ver:${userId}`;
   }
 
-  private dataKey(userId: number, version: string, limit: number, offset: number) {
+  private dataKey(
+    userId: number,
+    version: string,
+    limit: number,
+    offset: number,
+  ) {
     return `${this.prefix}wallet:history:${userId}:v${version}:${limit}:${offset}`;
   }
 
@@ -44,7 +49,9 @@ export class HistoryCache implements OnModuleDestroy {
       if (cached !== null) return JSON.parse(cached) as T;
     } catch (error) {
       key = null;
-      this.logger.warn(`Кэш недоступен, читаем из базы: ${(error as Error).message}`);
+      this.logger.warn(
+        `Кэш недоступен, читаем из базы: ${(error as Error).message}`,
+      );
     }
 
     const value = await loader();
@@ -53,7 +60,9 @@ export class HistoryCache implements OnModuleDestroy {
       try {
         await this.redis.set(key, JSON.stringify(value), 'EX', TTL_SECONDS);
       } catch (error) {
-        this.logger.warn(`Не удалось записать в кэш: ${(error as Error).message}`);
+        this.logger.warn(
+          `Не удалось записать в кэш: ${(error as Error).message}`,
+        );
       }
     }
     return value;

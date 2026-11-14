@@ -3,7 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { OutboxEvent } from './outbox-event.entity';
 import { OutboxRelay } from './outbox.relay';
-import {ConfigService} from "@nestjs/config";
+import { ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [

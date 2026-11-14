@@ -33,7 +33,9 @@ return {hits, ttlLeft, 0, 0}
 `;
 
 @Injectable()
-export class RedisThrottlerStorage implements ThrottlerStorage, OnModuleDestroy {
+export class RedisThrottlerStorage
+  implements ThrottlerStorage, OnModuleDestroy
+{
   private readonly logger = new Logger(RedisThrottlerStorage.name);
   private readonly redis: Redis;
 
@@ -74,7 +76,12 @@ export class RedisThrottlerStorage implements ThrottlerStorage, OnModuleDestroy 
       };
     } catch (error) {
       this.logger.warn(`Лимит не проверен: ${(error as Error).message}`);
-      return { totalHits: 0, timeToExpire: 0, isBlocked: false, timeToBlockExpire: 0 };
+      return {
+        totalHits: 0,
+        timeToExpire: 0,
+        isBlocked: false,
+        timeToBlockExpire: 0,
+      };
     }
   }
 

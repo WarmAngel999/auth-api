@@ -16,6 +16,7 @@ const PASSWORD = 'secret123';
 describe('Outbox (e2e)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
+  let aliceId: number;
   let relay: OutboxRelay;
   let addSpy: jest.SpyInstance;
 
@@ -42,7 +43,6 @@ describe('Outbox (e2e)', () => {
     if (dataSource.options.database !== 'auth_test') {
       throw new Error('E2E-тесты должны работать только с базой auth_test');
     }
-    await dataSource.synchronize(true);
     relay = app.get(OutboxRelay);
   });
 
@@ -68,7 +68,10 @@ describe('Outbox (e2e)', () => {
     const rows = await events();
     expect(rows).toHaveLength(1);
     expect(rows[0].type).toBe('user.registered');
-    expect(rows[0].payload).toEqual({ userId: res.body.id, email: 'a@example.com' });
+    expect(rows[0].payload).toEqual({
+      userId: res.body.id,
+      email: 'a@example.com',
+    });
     expect(rows[0].processed_at).toBeNull();
   });
 
@@ -136,19 +139,24 @@ describe('Outbox (e2e)', () => {
       ('user.registered', '{}', NULL)
   `);
 
-
     await relay.cleanup(7);
 
     const rows = await events();
     expect(rows).toHaveLength(2);
-    expect(rows.filter((r: { processed_at: Date | null }) => r.processed_at === null)).toHaveLength(1);
+    expect(
+      rows.filter(
+        (r: { processed_at: Date | null }) => r.processed_at === null,
+      ),
+    ).toHaveLength(1);
   });
   describe('transfer events', () => {
     let aliceToken: string;
     let bobId: number;
 
     const login = async (email: string) => {
-      const res = await http().post('/auth/login').send({ email, password: PASSWORD });
+      const res = await http()
+        .post('/auth/login')
+        .send({ email, password: PASSWORD });
       return res.body.accessToken as string;
     };
     const transfer = (amount: number, key: string) =>
@@ -159,8 +167,12 @@ describe('Outbox (e2e)', () => {
         .send({ toUserId: bobId, amount });
 
     beforeEach(async () => {
-      await register('alice@example.com').expect(201);
+      aliceId = (await register('alice@example.com').expect(201)).body.id;
       bobId = (await register('bob@example.com').expect(201)).body.id;
+      await dataSource.query(
+        "UPDATE users SET role = 'admin' WHERE email = $1",
+        ['alice@example.com'],
+      );
       aliceToken = await login('alice@example.com');
       await http()
         .post('/wallet/deposit')
@@ -181,6 +193,7 @@ describe('Outbox (e2e)', () => {
       expect(rows[0].type).toBe('transfer.completed');
       expect(rows[0].payload).toMatchObject({
         transferId: res.body.id,
+        fromUserId: aliceId,
         toUserId: bobId,
         amount: 3000,
       });

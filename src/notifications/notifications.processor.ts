@@ -7,7 +7,12 @@ export class NotificationsProcessor extends WorkerHost {
   private readonly logger = new Logger(NotificationsProcessor.name);
 
   async process(
-    job: Job<{ transferId: number; fromUserId: number; toUserId: number; amount: number }>,
+    job: Job<{
+      transferId: number;
+      fromUserId: number;
+      toUserId: number;
+      amount: number;
+    }>,
   ): Promise<void> {
     const { transferId, fromUserId, toUserId, amount } = job.data;
     this.logger.log(

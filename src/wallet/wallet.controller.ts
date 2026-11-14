@@ -7,7 +7,6 @@ import {
   Post,
   Req,
   UseGuards,
-  DefaultValuePipe,
   ParseIntPipe,
   Query,
 } from '@nestjs/common';
@@ -17,6 +16,9 @@ import { DepositDto } from './dto/deposit.dto';
 import { TransferDto } from './dto/transfer.dto';
 // путь к guard оставь тот, который у тебя уже был в этом файле
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../users/role.enum';
 
 type AuthRequest = Request & { user: { id: number } };
 
@@ -31,6 +33,8 @@ export class WalletController {
   }
 
   @Post('deposit')
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin)
   deposit(@Req() req: AuthRequest, @Body() dto: DepositDto) {
     return this.wallet.deposit(req.user.id, dto.amount);
   }
@@ -51,13 +55,16 @@ export class WalletController {
   @Get('transactions')
   history(
     @Req() req: AuthRequest,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+    @Query('cursor', new ParseIntPipe({ optional: true })) cursor?: number,
   ) {
-    return this.wallet.history(
-      req.user.id,
-      Math.min(Math.max(limit, 1), 100),
-      Math.max(offset, 0),
-    );
+    const pageSize = limit ?? 20;
+    if (pageSize < 1 || pageSize > 100) {
+      throw new BadRequestException('limit must be between 1 and 100');
+    }
+    if (cursor !== undefined && cursor < 1) {
+      throw new BadRequestException('cursor must be a positive integer');
+    }
+    return this.wallet.history(req.user.id, pageSize, cursor);
   }
 }

@@ -5,9 +5,9 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { WalletModule } from './wallet/wallet.module';
 import { BullModule } from '@nestjs/bullmq';
-import {MailModule} from './mail/mail.module';
-import {OutboxModule} from "./outbox/outbox.module";
-import {NotificationsModule} from "./notifications/notifications.module";
+import { MailModule } from './mail/mail.module';
+import { OutboxModule } from './outbox/outbox.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -48,8 +48,12 @@ import {NotificationsModule} from "./notifications/notifications.module";
         database: config.get('DB_NAME'),
         autoLoadEntities: true,
         synchronize: false,
-        migrations: [__dirname + '/migrations/*.js'],
-        migrationsRun: config.get('NODE_ENV') !== 'development',
+        logging:
+          config.get('NODE_ENV') === 'development'
+            ? ['query', 'error']
+            : ['error'],
+        migrations: [__dirname + '/migrations/*.{ts,js}'],
+        migrationsRun: true,
       }),
     }),
     BullModule.forRootAsync({

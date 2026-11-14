@@ -22,7 +22,11 @@ export class Wallet {
   @Column({ name: 'user_id', unique: true })
   userId: number;
 
-  @Column({ type: 'bigint', default: 0, transformer: { to: (v: number) => v, from: (v: string) => Number(v) } })
+  @Column({
+    type: 'bigint',
+    default: 0,
+    transformer: { to: (v: number) => v, from: (v: string) => Number(v) },
+  })
   balance: number;
 
   @CreateDateColumn({ name: 'created_at' })
