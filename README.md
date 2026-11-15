@@ -81,3 +81,15 @@ npm run test:e2e
 ```
 Нужна база `auth_test`. Перед прогоном `test/global-setup.ts` очищает её и поднимает схему
 миграциями; тесты работают только с `auth_test` и при другом имени базы останавливаются.
+
+## Поток событий
+
+```
+POST /wallet/transfer
+  └─ одна транзакция PostgreSQL: wallets + transfers + outbox_events
+OutboxRelay (каждые 2 с, FOR UPDATE SKIP LOCKED, до 100 событий)
+  └─ очередь BullMQ notifications, jobId = id события
+NotificationsProcessor (5 попыток, экспоненциальный backoff от 1 с)
+  └─ INSERT ... ON CONFLICT DO NOTHING в notifications (уникальный event_id)
+GET /notifications
+```
