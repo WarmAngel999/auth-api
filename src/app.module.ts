@@ -9,6 +9,8 @@ import { MailModule } from './mail/mail.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { TasksModule } from './tasks/tasks.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -38,6 +40,8 @@ import { ScheduleModule } from '@nestjs/schedule';
     MailModule,
     OutboxModule,
     NotificationsModule,
+    TasksModule,
+    AdminModule,
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
